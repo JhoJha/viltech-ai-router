@@ -1,7 +1,7 @@
 # Feature: local-mvp-resource-router
 
 ## Objective
-Deliver the local MVP of VilTech AI Router with RESOURCE/MODEL-granular routing: TOML `[resources.<name>]` config, risk/cost-aware selection, single-pass failover on infrastructure failures only, privacy-safe telemetry, and stdlib-only CLI (`inventory`, `status`, `route`, `run`, `state-reset`). Local implementation only: no commit, push, remote, or deploy in this run (explicit user override).
+Deliver the local MVP of VilTech AI Router with RESOURCE/MODEL-granular routing: TOML `[resources.<name>]` config, risk/cost-aware selection, single-pass failover on infrastructure failures only, privacy-safe telemetry, and stdlib-only CLI (`inventory`, `status`, `route`, `run`, `state-reset`). Local implementation only: work-unit commits are allowed; no push, remote repository, PR or deploy.
 
 ## Problem
 Scaffold routes at CLI-adapter granularity (`[adapters.*]`), but one adapter exposes many models with different quotas/risk profiles. Routing must be per-resource (adapter + model) so premium models are protected and quota failures are tracked per model.
@@ -15,7 +15,7 @@ Preserve the useful scaffold (enums, classifier patterns, state cooldown logic, 
 - Remove duplicate placeholder `src/viltech_router/` (done: verified unreferenced, untracked).
 - Add `tests/` unittest suite.
 - Update README minimally.
-- NO git commit/push/PR/remote/deploy.
+- Local work-unit commits allowed. NO push/PR/remote/deploy.
 
 ## Constraints
 - Python stdlib only (tomllib, argparse, subprocess, unittest). No external deps.
@@ -56,6 +56,7 @@ Preserve the useful scaffold (enums, classifier patterns, state cooldown logic, 
 - 2026-09-27: tests + deterministic failover E2E passed; real low-risk dogfood routed to OpenCode DeepSeek successfully with no prompt in telemetry.
 - 2026-09-27: independent Agy/Gemini one-shot review found three HIGHs and two MEDIUMs. Prompt argv exposure fixed with stdin transports; whole-worker timeout changed to non-failover; OpenCode gained explicit `--dir` while every subprocess already runs with cwd=repo and Codex uses `-C`; no-premium-spill test added. Generic local `timed out` text no longer counts as provider timeout. Offline auto-recovery remains acceptable for MVP because every route re-checks binary presence before execution.
 - 2026-09-27: final verification: 11/11 unittest PASS, compileall PASS, diff check PASS, secret scan 0 findings. Real Agy stream-json stdin probe returned `AGY_STDIN_OK`; real router dogfood with final stdin transport routed low-risk review to `opencode_deepseek` and exited 0. Deterministic fake E2E again proved quota exhaustion → exactly one fallback success with prompt absent from state/telemetry.
+- Local implementation commit: `cf803cf0b2354281fa6952129c7c7903ef1e1bcd` (`feat(router): add multimodel quota-aware failover`). No remote, push, PR or deploy.
 
 ## Checks
 - `python -m unittest discover -s tests -v`
