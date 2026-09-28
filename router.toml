@@ -1,0 +1,60 @@
+[router]
+state_file = "~/.local/state/viltech-ai-router/state.json"
+telemetry_file = "~/.local/state/viltech-ai-router/telemetry.jsonl"
+default_cooldown_seconds = 300
+worker_timeout_seconds = 600
+
+[resources.agy_flash]
+adapter = "agy"
+bin = "agy"
+model = "gemini-3.8-flash-high"
+roles = ["planner", "coder", "reviewer"]
+min_risk = "low"
+max_risk = "medium"
+priority = 30
+cost_class = "low"
+quota_retry_seconds = 900
+
+[resources.agy_opus]
+adapter = "agy"
+bin = "agy"
+model = "claude-opus-4-6-thinking"
+roles = ["planner", "coder", "reviewer"]
+min_risk = "high"
+max_risk = "high"
+priority = 10
+cost_class = "premium"
+quota_retry_seconds = 1800
+
+[resources.opencode_deepseek]
+adapter = "opencode"
+bin = "opencode"
+model = "opencode-go/deepseek-v4-flash"
+roles = ["planner", "coder", "reviewer"]
+min_risk = "low"
+max_risk = "medium"
+priority = 10
+cost_class = "low"
+quota_retry_seconds = 900
+
+[resources.opencode_luna]
+adapter = "opencode"
+bin = "opencode"
+model = "opencode-go/gpt-6-luna"
+roles = ["planner", "coder", "reviewer"]
+min_risk = "low"
+max_risk = "medium"
+priority = 20
+cost_class = "standard"
+quota_retry_seconds = 900
+
+[resources.codex_sol]
+adapter = "codex"
+bin = "codex"
+model = "gpt-6-sol"
+roles = ["planner", "coder", "reviewer"]
+min_risk = "high"
+max_risk = "high"
+priority = 20
+cost_class = "premium"
+quota_retry_seconds = 1800
