@@ -50,6 +50,7 @@ python -m viltech_ai_router run --prompt-file task.txt --repo-dir /ruta/al/repo 
 
 ## Qué no funciona / quedó pendiente
 
+- **Uso real muy limitado.** Aparte de la prueba con una tarea real el día que terminé el MVP (27-sep-2026), no hay estado ni telemetría de uso posterior: el failover nunca se probó con errores reales de cuota en el día a día.
 - **No conoce la cuota restante.** Solo reacciona a los errores que reporta la CLI; no hay consulta proactiva de saldo.
 - **La clasificación de errores usa regex sobre la salida de la CLI.** Si una CLI cambia sus mensajes, un error de cuota puede caer en `unknown_error` y no se hará failover.
 - El estado `near_limit` está definido pero nunca se asigna (no hay señal de "casi agotado").
