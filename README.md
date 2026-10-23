@@ -67,3 +67,7 @@ python -m viltech_ai_router run --prompt-file task.txt --repo-dir /ruta/al/repo 
 ## Stack
 
 Python 3.11+ (solo stdlib) · TOML · JSONL · `unittest` · CLIs: Antigravity (`agy`), OpenCode, Codex
+
+## Licencia
+
+© 2026 Jhon Villegas — [AGPL-3.0](LICENSE). Para uso comercial bajo otros términos, contáctame.
