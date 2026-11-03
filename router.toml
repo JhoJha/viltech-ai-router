@@ -3,22 +3,26 @@ state_file = "~/.local/state/viltech-ai-router/state.json"
 telemetry_file = "~/.local/state/viltech-ai-router/telemetry.jsonl"
 default_cooldown_seconds = 300
 worker_timeout_seconds = 600
+# Repos with personal data of students or clients: resources with
+# sensitive_ok = false are never chosen for them (nor for their worktrees).
+# A `.router-sensitive` file in any other repo has the same effect.
+sensitive_repos = ["bot-idiomas-app", "tuhistoria-crm", "finados", "tu-historia-eterna-video"]
 
-[resources.agy_flash]
-adapter = "agy"
-bin = "agy"
-model = "gemini-3.8-flash-high"
+[resources.codex_terra]
+adapter = "codex"
+bin = "codex"
+model = "gpt-6.1-terra"
 roles = ["planner", "coder", "reviewer"]
 min_risk = "low"
 max_risk = "medium"
-priority = 30
-cost_class = "low"
-quota_retry_seconds = 900
+priority = 10
+cost_class = "standard"
+quota_retry_seconds = 1800
 
-[resources.agy_opus]
-adapter = "agy"
-bin = "agy"
-model = "claude-opus-4-6-thinking"
+[resources.codex_sol]
+adapter = "codex"
+bin = "codex"
+model = "gpt-6-sol"
 roles = ["planner", "coder", "reviewer"]
 min_risk = "high"
 max_risk = "high"
@@ -26,32 +30,47 @@ priority = 10
 cost_class = "premium"
 quota_retry_seconds = 1800
 
-[resources.opencode_deepseek]
+# OpenCode Zen free models: the provider may keep prompts, so never on sensitive repos.
+[resources.opencode_nemotron]
 adapter = "opencode"
 bin = "opencode"
-model = "opencode-go/deepseek-v4-flash"
+model = "opencode/nemotron-3.5-lightning-free"
 roles = ["planner", "coder", "reviewer"]
 min_risk = "low"
 max_risk = "medium"
-priority = 10
-cost_class = "low"
+priority = 30
+cost_class = "free"
 quota_retry_seconds = 900
+sensitive_ok = false
 
-[resources.opencode_luna]
+[resources.opencode_deepseek]
 adapter = "opencode"
 bin = "opencode"
-model = "opencode-go/gpt-6-luna"
+model = "opencode/deepseek-v4.1-flash-free"
+roles = ["planner", "coder", "reviewer"]
+min_risk = "low"
+max_risk = "medium"
+priority = 40
+cost_class = "free"
+quota_retry_seconds = 900
+sensitive_ok = false
+
+# Antigravity (Google AI Pro): ids confirmed with `agy models` on 2026-11-03.
+[resources.agy_flash]
+adapter = "agy"
+bin = "agy"
+model = "gemini-3.8-flash-high"
 roles = ["planner", "coder", "reviewer"]
 min_risk = "low"
 max_risk = "medium"
 priority = 20
-cost_class = "standard"
+cost_class = "low"
 quota_retry_seconds = 900
 
-[resources.codex_sol]
-adapter = "codex"
-bin = "codex"
-model = "gpt-6-sol"
+[resources.agy_opus]
+adapter = "agy"
+bin = "agy"
+model = "claude-opus-5-5-medium"
 roles = ["planner", "coder", "reviewer"]
 min_risk = "high"
 max_risk = "high"

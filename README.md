@@ -28,7 +28,8 @@ Decisiones de diseño clave:
 - **Granularidad por recurso (adapter + modelo), no por CLI.** Una misma CLI expone modelos con cuotas y riesgos distintos, así que el estado y el cooldown se llevan por modelo.
 - **El failover ocurre solo ante fallas de infraestructura.** Si el error es de código o de tests, se detiene: reintentar con otro modelo ocultaría el problema real y gastaría cuota.
 - **Las ventanas de riesgo protegen a los premium.** Las tareas low/medium nunca "se derraman" a modelos premium; las tareas high nunca bajan silenciosamente a un modelo más débil.
-- **Privacidad por diseño.** El prompt se pasa por stdin (no por argv, que es visible en `ps`). En estado y telemetría solo se guardan nombre del recurso, categoría de error, duración y el nombre base del repo.
+- **Privacidad por diseño.** El prompt se pasa por stdin (no por argv, que es visible en `ps`). En estado y telemetría solo se guardan nombre del recurso, categoría de error, duración y el nombre base del repo. La respuesta del agente se muestra solo en la terminal.
+- **Repos sensibles.** Los repos de `sensitive_repos` (y sus worktrees), o cualquier repo con un archivo `.router-sensitive`, nunca se envían a recursos con `sensitive_ok = false`. Por ejemplo, modelos gratuitos que pueden guardar los prompts, o proveedores que no deben ver datos personales de alumnos o clientes.
 - **Solo biblioteca estándar** (`tomllib`, `argparse`, `subprocess`, `unittest`), así que no hay dependencias que auditar.
 
 ## Qué funciona hoy
@@ -44,13 +45,23 @@ python -m viltech_ai_router run --prompt-file task.txt --repo-dir /ruta/al/repo 
 ```
 
 - `inventory`, `status`, `route` y `state-reset` están verificados.
-- Tests: `python -m unittest discover -s tests -v` → **11/11 pasan**. Cubren routing por riesgo y costo, la forma de los comandos de cada CLI, la clasificación de errores, la recuperación del cooldown, el failover, la privacidad de la telemetría y que no haya failover ante fallas de la tarea.
-- `run` se probó en desarrollo con una tarea real enrutada a OpenCode/DeepSeek y con un E2E de proveedor falso: cuota agotada → un único fallback exitoso. **Ojo:** `run` llama a proveedores reales y consume cuota.
-- `router.toml` refleja mi configuración local (modelos y prioridades). Ajústalo a las CLIs y modelos que tengas.
+- Tests: `python -m unittest discover -s tests -v` → **15/15 pasan**. Cubren routing por riesgo y costo, la forma de los comandos de cada CLI, la clasificación de errores (incluidos mensajes reales de opencode 1.19 y agy 1.4), los errores que una CLI reporta con código 0, la extracción de la respuesta, el candado de repos sensibles, la recuperación del cooldown, el failover, la privacidad de la telemetría y que no haya failover ante fallas de la tarea.
+- **Probado con CLIs reales el 03-nov-2026** (codex-cli 0.165, opencode 1.19.5, agy 1.4.12):
+  - `run` con Codex (`gpt-6.1-terra`, plan ChatGPT Plus) resolvió una tarea real: creó un archivo y su test y lo ejecutó.
+  - Failover real: un modelo de una suscripción vencida (`opencode-go/…`, que OpenCode reporta como «Unexpected server error») quedó en `provider_down` con cooldown, y la tarea pasó a un modelo gratuito de OpenCode Zen.
+  - Antigravity sin sesión iniciada devuelve `authentication required`; el router lo clasifica como `auth_error` y pasa al siguiente.
+  - Antigravity (`gemini-3.8-flash-high`) resolvió una tarea real con edición y tests dentro de su sandbox. El sandbox deja la carpeta personal en solo lectura fuera del repo.
+  - Failover real Codex → Antigravity: un modelo que Codex rechaza con una cuenta de ChatGPT («model is not supported») quedó en `provider_down` y agy terminó la tarea.
+- **Antigravity corre con el mismo contrato que Codex** (`-s workspace-write -a never`): `--sandbox` con `toolPermission = "proceed-in-sandbox"`. Los comandos dentro del sandbox corren sin pedir permiso; lo que necesite salir del sandbox queda negado en modo sin interfaz. No se usan reglas `command(...)`, porque Antigravity las deja correr también fuera del sandbox. Si una herramienta queda negada, agy responde `SUCCESS` con la respuesta vacía; el router lo trata como fallo de la tarea, no como éxito.
+- Uso diario desde cualquier repo: con un lanzador en el PATH (por ejemplo, `vr` → `PYTHONPATH=<repo> python3 -m viltech_ai_router "$@"`), `echo "tarea" | vr run --prompt-file - --risk low` trabaja sobre el repo actual. La configuración se busca en `$VILTECH_ROUTER_CONFIG`, luego en `./router.toml` y por último junto al paquete.
+- **Ojo:** `run` llama a proveedores reales y consume cuota.
+- `router.toml` refleja mi configuración local (modelos y prioridades). Ajústalo a las CLIs y modelos que tengas. Para ver los modelos disponibles: `opencode models`, `agy models` (requiere sesión) y `/model` dentro de `codex`.
 
 ## Qué no funciona / quedó pendiente
 
-- **Uso real muy limitado.** Aparte de la prueba con una tarea real el día que terminé el MVP (27-sep-2026), no hay estado ni telemetría de uso posterior: el failover nunca se probó con errores reales de cuota en el día a día.
+- **Uso real todavía corto.** El failover ya se probó con un error real de proveedor (03-nov-2026), pero aún no con un agotamiento real de cuota en el uso diario.
+- **Mensajes de cuota de Codex y Antigravity no capturados en vivo.** Los patrones `usage limit` / `hit your limit` se basan en mensajes conocidos; si el texto real difiere, ese agotamiento caerá en `unknown_error` sin failover. Hay que capturarlo la primera vez que ocurra y agregarlo a los tests.
+- **Por qué dejó de funcionar en octubre:** la suscripción de OpenCode Go venció, así que sus modelos desaparecieron. OpenCode lo reporta solo como «Unexpected server error», que el clasificador no reconocía: el router lo trataba como fallo de la tarea y se detenía sin pasar al siguiente recurso. Además, `run` no mostraba la respuesta del agente.
 - **No conoce la cuota restante.** Solo reacciona a los errores que reporta la CLI; no hay consulta proactiva de saldo.
 - **La clasificación de errores usa regex sobre la salida de la CLI.** Si una CLI cambia sus mensajes, un error de cuota puede caer en `unknown_error` y no se hará failover.
 - El estado `near_limit` está definido pero nunca se asigna (no hay señal de "casi agotado").

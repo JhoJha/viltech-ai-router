@@ -26,10 +26,13 @@ class Router:
     def route(self, task: TaskRequest) -> RouteDecision:
         eligible: list[ResourceConfig] = []
         rejected = {}
+        sensitive = self.config.is_sensitive(task.repo_dir)
         for resource in self.config.resources.values():
             reason = None
             if not resource.enabled:
                 reason = "disabled"
+            elif sensitive and not resource.sensitive_ok:
+                reason = "sensitive_repo"
             elif task.role not in resource.roles:
                 reason = "role"
             elif not (RISK_ORDER[resource.min_risk] <= RISK_ORDER[task.risk] <= RISK_ORDER[resource.max_risk]):

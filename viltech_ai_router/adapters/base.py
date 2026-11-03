@@ -1,11 +1,25 @@
 """Subprocess boundary for configured CLI resources."""
 
 from abc import ABC, abstractmethod
+import json
 import shutil
 import subprocess
 import time
 from ..classifier import classify_error
 from ..models import ErrorCategory, ExecutionResult, ResourceConfig, TaskRequest
+
+
+def json_events(stdout: str) -> list[dict]:
+    """Parse NDJSON output, skipping lines that are not JSON objects."""
+    events = []
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events
 
 
 class BaseAdapter(ABC):
@@ -23,6 +37,14 @@ class BaseAdapter(ABC):
         """Return prompt transport for stdin when supported by the CLI."""
         return None
 
+    def output_error(self, stdout: str, stderr: str) -> str | None:
+        """Return the error a CLI reported in its output despite exiting 0."""
+        return None
+
+    def extract_text(self, stdout: str) -> str:
+        """Return the worker's final answer from the CLI output."""
+        return stdout.strip()
+
     def execute(self, task: TaskRequest) -> ExecutionResult:
         start = time.monotonic()
         try:
@@ -31,6 +53,9 @@ class BaseAdapter(ABC):
                 text=True, timeout=self.config.timeout_seconds, input=self.stdin_payload(task),
             )
             code, stdout, stderr = process.returncode, process.stdout or "", process.stderr or ""
+            reported = self.output_error(stdout, stderr) if code == 0 else None
+            if reported is not None:
+                code, stderr = 1, f"{stderr}\n{reported}"
             category, infra = classify_error(code, stdout, stderr)
         except subprocess.TimeoutExpired:
             code, stdout, stderr = 124, "", ""
