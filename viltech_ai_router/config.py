@@ -51,6 +51,9 @@ def load_config(config_path: Path | None = None) -> RouterConfig:
         enabled = item.get("enabled", True)
         if not isinstance(enabled, bool):
             raise ValueError(f"resources.{name}.enabled must be boolean")
+        sensitive_ok = item.get("sensitive_ok", True)
+        if not isinstance(sensitive_ok, bool):
+            raise ValueError(f"resources.{name}.sensitive_ok must be boolean")
         for optional in ("variant", "effort"):
             if optional in item and (not isinstance(item[optional], str) or not item[optional]):
                 raise ValueError(f"resources.{name}.{optional} must be nonempty text")
@@ -62,10 +65,15 @@ def load_config(config_path: Path | None = None) -> RouterConfig:
             quota_retry_seconds=_positive(item.get("quota_retry_seconds", cooldown), f"resources.{name}.quota_retry_seconds"),
             timeout_seconds=_positive(item.get("timeout_seconds", timeout), f"resources.{name}.timeout_seconds"),
             enabled=enabled, variant=item.get("variant"), effort=item.get("effort"),
+            sensitive_ok=sensitive_ok,
         )
     if not resources:
         raise ValueError("configuration requires at least one [resources.<name>] table")
+    sensitive_repos = router.get("sensitive_repos", [])
+    if not isinstance(sensitive_repos, list) or not all(isinstance(n, str) and n for n in sensitive_repos):
+        raise ValueError("sensitive_repos must be a list of repository names")
     return RouterConfig(
+        sensitive_repos=tuple(sensitive_repos),
         state_file=Path(router.get("state_file", str(DEFAULT_STATE))).expanduser(),
         telemetry_file=Path(router.get("telemetry_file", str(DEFAULT_TELEMETRY))).expanduser(),
         default_cooldown_seconds=cooldown, worker_timeout_seconds=timeout,

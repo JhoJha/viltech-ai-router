@@ -1,16 +1,27 @@
 """Local stdlib command-line interface."""
 
 import argparse
+import os
 from pathlib import Path
+import sys
 from .adapters import create_adapter
 from .config import load_config
 from .models import RiskLevel, Role, TaskRequest
 from .router import Router
 
 
+def _default_config() -> Path:
+    """$VILTECH_ROUTER_CONFIG, then ./router.toml, then the one next to the package,
+    so the router can run from inside the repo it works on."""
+    if os.environ.get("VILTECH_ROUTER_CONFIG"):
+        return Path(os.environ["VILTECH_ROUTER_CONFIG"]).expanduser()
+    local = Path("router.toml")
+    return local if local.is_file() else Path(__file__).resolve().parent.parent / "router.toml"
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="viltech-ai-router")
-    parser.add_argument("--config", type=Path, default=Path("router.toml"))
+    parser.add_argument("--config", type=Path, default=None)
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("inventory", "status", "route", "run", "state-reset"):
         command = sub.add_parser(name)
@@ -31,12 +42,12 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        config = load_config(args.config)
+        config = load_config(args.config or _default_config())
         router = Router(config)
         if args.command == "inventory":
             for resource in config.resources.values():
                 installed = create_adapter(resource).is_installed()
-                print(f"{resource.name}\t{resource.adapter}\t{resource.model}\tinstalled={str(installed).lower()}\tstate={router.state.get_state(resource.name).value}")
+                print(f"{resource.name}\t{resource.adapter}\t{resource.model}\tinstalled={str(installed).lower()}\tstate={router.state.get_state(resource.name).value}\tenabled={str(resource.enabled).lower()}\tsensitive_ok={str(resource.sensitive_ok).lower()}")
         elif args.command == "status":
             for resource in config.resources.values():
                 state = router.state.get_state(resource.name).value
@@ -51,10 +62,18 @@ def main(argv: list[str] | None = None) -> int:
             repo_dir = args.repo_dir.expanduser().resolve()
             if not repo_dir.is_dir():
                 raise ValueError("repo_dir must be an existing directory")
-            prompt = "" if args.command == "route" else (args.prompt if args.prompt is not None else args.prompt_file.read_text(encoding="utf-8"))
+            if args.command == "route":
+                prompt = ""
+            elif args.prompt is not None:
+                prompt = args.prompt
+            elif str(args.prompt_file) == "-":
+                prompt = sys.stdin.read()
+            else:
+                prompt = args.prompt_file.read_text(encoding="utf-8")
             task = TaskRequest(Role(args.role), RiskLevel(args.risk), prompt, repo_dir)
             if args.command == "route":
                 decision = router.route(task)
+                print(f"sensitive_repo={str(config.is_sensitive(repo_dir)).lower()}")
                 print(f"selected={decision.selected_resource or 'none'}")
                 print(f"candidates={','.join(decision.candidates)}")
                 for name, reason in decision.rejected_reasons.items():
@@ -65,7 +84,12 @@ def main(argv: list[str] | None = None) -> int:
             for result in results:
                 print(f"attempt={result.resource_name} result={result.error_category.value} exit_code={result.exit_code}")
             if results:
-                print(f"final_resource={results[-1].resource_name}")
+                final = results[-1]
+                print(f"final_resource={final.resource_name}")
+                if final.exit_code == 0:
+                    # The worker's answer goes to the operator's terminal only, never to telemetry.
+                    print("----- respuesta -----")
+                    print(create_adapter(config.resources[final.resource_name]).extract_text(final.stdout))
             return 0 if results and results[-1].exit_code == 0 else 2
         return 0
     except (OSError, ValueError, KeyError) as exc:

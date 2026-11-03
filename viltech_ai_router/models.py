@@ -70,6 +70,11 @@ class ResourceConfig:
     enabled: bool = True
     variant: str | None = None
     effort: str | None = None
+    # False for providers that must never see repositories with personal data.
+    sensitive_ok: bool = True
+
+
+SENSITIVE_MARKER = ".router-sensitive"
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,13 @@ class RouterConfig:
     worker_timeout_seconds: int
     resources: dict[str, ResourceConfig]
     raw: dict = field(default_factory=dict)
+    sensitive_repos: tuple[str, ...] = ()
+
+    def is_sensitive(self, repo_dir: Path) -> bool:
+        """A repo is sensitive by name (worktrees included) or by a marker file."""
+        paths = (repo_dir, *repo_dir.parents)
+        return (any(path.name in self.sensitive_repos for path in paths)
+                or any((path / SENSITIVE_MARKER).is_file() for path in paths))
 
 
 @dataclass(frozen=True)

@@ -51,8 +51,10 @@ class RouterTests(unittest.TestCase):
     def test_commands_are_model_specific(self):
         agy = self.resources["flash"]
         self.assertEqual(create_adapter(agy).build_command(self.task),
-                         ["agy", "--model", "flash", "--input-format", "stream-json",
-                          "--output-format", "stream-json"])
+                         ["agy", "--model", "flash", "--sandbox", "--settings",
+                          '{"enableTerminalSandbox":true,"toolPermission":"proceed-in-sandbox"}',
+                          "--input-format", "stream-json", "--output-format", "stream-json"])
+        self.assertNotIn("--dangerously-skip-permissions", create_adapter(agy).build_command(self.task))
         self.assertIn(
             '"content":"secret prompt"',
             create_adapter(agy).stdin_payload(self.task),
@@ -203,6 +205,67 @@ roles = ["coder"]
         path.write_text(path.read_text().replace('roles = ["coder"]', 'roles = ["invalid"]'))
         with self.assertRaises(ValueError):
             load_config(path)
+
+    def test_real_cli_errors_are_infrastructure_failures(self):
+        # Captured from opencode 1.19 (expired subscription model) and agy 1.4 (not signed in).
+        self.assertEqual(classify_error(1, '{"type":"error","error":{"data":{"message":"Unexpected server error."}}}', ""),
+                         (ErrorCategory.PROVIDER_DOWN, True))
+        self.assertEqual(classify_error(1, "", "Error: authentication required. Run 'agy' to log in, then retry."),
+                         (ErrorCategory.AUTH_ERROR, True))
+        # Captured from codex-cli 0.165 with a ChatGPT Plus account.
+        self.assertEqual(classify_error(1, "", "ERROR: The 'gpt-x' model is not supported when using Codex with a ChatGPT account."),
+                         (ErrorCategory.PROVIDER_DOWN, True))
+        self.assertEqual(classify_error(1, "", "You've hit your usage limit. Try again later."),
+                         (ErrorCategory.QUOTA_EXHAUSTED, True))
+
+    def test_exit_zero_with_error_event_is_a_failure(self):
+        opencode = replace(self.resources["flash"], adapter="opencode", bin="opencode")
+        stdout = '{"type":"error","error":{"name":"UnknownError","data":{"message":"Unexpected server error."}}}\n'
+        with patch("viltech_ai_router.adapters.base.subprocess.run",
+                   return_value=subprocess.CompletedProcess([], 0, stdout, "")):
+            result = create_adapter(opencode).execute(self.task)
+        self.assertEqual((result.exit_code, result.error_category), (1, ErrorCategory.PROVIDER_DOWN))
+        self.assertTrue(result.is_infrastructure_failure)
+        agy_out = '{"event":"result","result":{"status":"ERROR","error":"authentication failed or timed out"}}\n'
+        with patch("viltech_ai_router.adapters.base.subprocess.run",
+                   return_value=subprocess.CompletedProcess([], 0, agy_out, "")):
+            result = create_adapter(self.resources["flash"]).execute(self.task)
+        self.assertEqual(result.error_category, ErrorCategory.AUTH_ERROR)
+        # Captured from agy 1.4.12: a denied tool still reports SUCCESS with an empty answer.
+        denied_out = '{"event":"result","result":{"status":"SUCCESS","response":""}}\n'
+        denied_err = 'no output produced — a tool required the "command" permission that headless mode cannot prompt for, so it was auto-denied.'
+        with patch("viltech_ai_router.adapters.base.subprocess.run",
+                   return_value=subprocess.CompletedProcess([], 0, denied_out, denied_err)):
+            result = create_adapter(self.resources["flash"]).execute(self.task)
+        self.assertEqual((result.error_category, result.is_infrastructure_failure),
+                         (ErrorCategory.TASK_FAILURE, False))
+
+    def test_extract_text_per_cli(self):
+        opencode = replace(self.resources["flash"], adapter="opencode", bin="opencode")
+        stdout = ('{"type":"step_start","part":{}}\n'
+                  '{"type":"text","part":{"type":"text","text":"LISTO"}}\n')
+        self.assertEqual(create_adapter(opencode).extract_text(stdout), "LISTO")
+        agy_out = '{"event":"result","result":{"status":"SUCCESS","response":" hecho "}}\n'
+        self.assertEqual(create_adapter(self.resources["flash"]).extract_text(agy_out), "hecho")
+        codex = replace(self.resources["flash"], adapter="codex", bin="codex")
+        self.assertEqual(create_adapter(codex).extract_text("LISTO\n"), "LISTO")
+
+    @patch("viltech_ai_router.adapters.base.shutil.which", return_value="/bin/fake")
+    def test_sensitive_repo_excludes_restricted_resources(self, _):
+        resources = {"trusted": self.resources["flash"],
+                     "restricted": replace(self.resources["flash"], name="restricted", priority=1,
+                                           sensitive_ok=False)}
+        repo = self.root / "bot-idiomas-app" / ".claude" / "worktrees" / "x"
+        repo.mkdir(parents=True)
+        config = replace(self.config, resources=resources, sensitive_repos=("bot-idiomas-app",))
+        decision = Router(config).route(replace(self.task, repo_dir=repo))
+        self.assertEqual(decision.candidates, ["flash"])
+        self.assertEqual(decision.rejected_reasons["restricted"], "sensitive_repo")
+        other = self.root / "otro"
+        other.mkdir()
+        self.assertEqual(Router(config).route(replace(self.task, repo_dir=other)).candidates, ["restricted", "flash"])
+        (other / ".router-sensitive").write_text("")
+        self.assertEqual(Router(config).route(replace(self.task, repo_dir=other)).candidates, ["flash"])
 
 
 if __name__ == "__main__":
