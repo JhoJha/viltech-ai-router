@@ -6,7 +6,7 @@ from ..models import TaskRequest
 
 class CodexAdapter(BaseAdapter):
     def build_command(self, task: TaskRequest) -> list[str]:
-        return [
+        command = [
             self.config.bin,
             "-a",
             "never",
@@ -16,10 +16,11 @@ class CodexAdapter(BaseAdapter):
             str(task.repo_dir),
             "-m",
             self.config.model,
-            "exec",
-            "--ephemeral",
-            "-",
         ]
+        # Without `effort`, Codex uses `model_reasoning_effort` from ~/.codex/config.toml.
+        if self.config.effort:
+            command += ["-c", f"model_reasoning_effort={self.config.effort}"]
+        return command + ["exec", "--ephemeral", "-"]
 
     def stdin_payload(self, task: TaskRequest) -> str:
         return task.prompt

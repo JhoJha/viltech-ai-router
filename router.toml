@@ -19,15 +19,17 @@ priority = 10
 cost_class = "standard"
 quota_retry_seconds = 1800
 
+# Main implementer (model evaluation, 04-nov-2026): best cost/quality on every risk level.
 [resources.codex_sol]
 adapter = "codex"
 bin = "codex"
-model = "gpt-6-sol"
+model = "gpt-6.1-sol"
+effort = "medium"
 roles = ["planner", "coder", "reviewer"]
-min_risk = "high"
+min_risk = "low"
 max_risk = "high"
-priority = 10
-cost_class = "premium"
+priority = 5
+cost_class = "standard"
 quota_retry_seconds = 1800
 
 # OpenCode Zen free models: the provider may keep prompts, so never on sensitive repos.

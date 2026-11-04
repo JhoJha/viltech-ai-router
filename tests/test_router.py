@@ -70,11 +70,16 @@ class RouterTests(unittest.TestCase):
                          ["opencode", "run", "-m", "provider/model", "--variant", "fast",
                           "--dir", str(self.root), "--format", "json"])
         self.assertEqual(create_adapter(opencode).stdin_payload(self.task), "secret prompt\n")
-        codex = replace(agy, adapter="codex", bin="codex", model="gpt-6-sol")
+        codex = replace(agy, adapter="codex", bin="codex", model="gpt-6.1-sol", effort=None)
         self.assertEqual(create_adapter(codex).build_command(self.task),
                          ["codex", "-a", "never", "-s", "workspace-write", "-C",
-                          str(self.root), "-m", "gpt-6-sol", "exec", "--ephemeral", "-"])
+                          str(self.root), "-m", "gpt-6.1-sol", "exec", "--ephemeral", "-"])
         self.assertEqual(create_adapter(codex).stdin_payload(self.task), "secret prompt")
+        con_esfuerzo = replace(codex, effort="medium")
+        self.assertEqual(create_adapter(con_esfuerzo).build_command(self.task),
+                         ["codex", "-a", "never", "-s", "workspace-write", "-C",
+                          str(self.root), "-m", "gpt-6.1-sol", "-c", "model_reasoning_effort=medium",
+                          "exec", "--ephemeral", "-"])
 
     def test_classifier_and_timeout(self):
         for message, expected in [
