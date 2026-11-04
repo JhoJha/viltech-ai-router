@@ -50,11 +50,17 @@ class RouterTests(unittest.TestCase):
 
     def test_commands_are_model_specific(self):
         agy = self.resources["flash"]
-        self.assertEqual(create_adapter(agy).build_command(self.task),
-                         ["agy", "--model", "flash", "--sandbox", "--settings",
-                          '{"enableTerminalSandbox":true,"toolPermission":"proceed-in-sandbox"}',
-                          "--input-format", "stream-json", "--output-format", "stream-json"])
-        self.assertNotIn("--dangerously-skip-permissions", create_adapter(agy).build_command(self.task))
+        comando = create_adapter(agy).build_command(self.task)
+        self.assertEqual(comando[:5], ["agy", "--model", "flash", "--sandbox", "--settings"])
+        self.assertEqual(comando[6:], ["--input-format", "stream-json", "--output-format", "stream-json"])
+        ajustes = json.loads(comando[5])
+        self.assertEqual(ajustes["toolPermission"], "proceed-in-sandbox")
+        self.assertTrue(ajustes["enableTerminalSandbox"])
+        # agy 1.5: write and edit only inside the task's repository, and never command() rules.
+        self.assertEqual(ajustes["permissions"]["allow"],
+                         [f"write_file({self.root}/)", f"edit_file({self.root}/)"])
+        self.assertNotIn("command(", comando[5])
+        self.assertNotIn("--dangerously-skip-permissions", comando)
         self.assertIn(
             '"content":"secret prompt"',
             create_adapter(agy).stdin_payload(self.task),
