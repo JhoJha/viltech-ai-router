@@ -18,7 +18,19 @@ def _result(stdout: str) -> dict:
 # inside the terminal sandbox (writes outside the repo fail); anything needing to leave
 # it requires review, which headless mode auto-denies. Never use `command(...)` allow
 # rules here: Antigravity lets those run outside the sandbox too.
-SANDBOX_SETTINGS = '{"enableTerminalSandbox":true,"toolPermission":"proceed-in-sandbox"}'
+# Since agy 1.5 (auto-updated on 2026-11-04) headless mode also auto-denies the file
+# tools unless an allow rule names the path: write and edit are allowed only inside
+# the task's repository, so a write elsewhere is still denied (and ends the turn).
+def sandbox_settings(repo_dir) -> str:
+    raiz = f"{repo_dir}/"
+    return json.dumps(
+        {
+            "enableTerminalSandbox": True,
+            "toolPermission": "proceed-in-sandbox",
+            "permissions": {"allow": [f"write_file({raiz})", f"edit_file({raiz})"]},
+        },
+        separators=(",", ":"),
+    )
 
 
 class AgyAdapter(BaseAdapter):
@@ -29,7 +41,7 @@ class AgyAdapter(BaseAdapter):
         return command + [
             "--sandbox",
             "--settings",
-            SANDBOX_SETTINGS,
+            sandbox_settings(task.repo_dir),
             "--input-format",
             "stream-json",
             "--output-format",
